@@ -2,4 +2,5 @@ yash first fiule to commit;
  thid is an file for the commit and each other;
 
  just recently i have learnde git hub now i am ready to work with multiple peoples;
- 
+  these things are nessaery
+  
