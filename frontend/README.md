@@ -1,16 +1,52 @@
-# React + Vite
+# Satellite Telemetry System — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend for the **Satellite Telemetry System**, built with **React and Vite**.
 
-Currently, two official plugins are available:
+## Technologies
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+* React
+* Vite
+* JavaScript
+* ESLint
 
-## React Compiler
+## Installation
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+```
 
-## Expanding the ESLint configuration
+## Run the Project
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+npm run dev
+```
+
+Frontend runs at:
+
+```text
+http://localhost:5173
+```
+
+## Backend
+
+The frontend communicates with the **Django REST API**:
+
+```text
+http://127.0.0.1:8000
+```
+
+## Project Structure
+
+```text
+frontend/
+├── public/
+├── src/
+├── package.json
+└── vite.config.js
+```
+
+## Project
+
+**Satellite Telemetry System**
+
+React frontend for monitoring and displaying satellite telemetry data.
