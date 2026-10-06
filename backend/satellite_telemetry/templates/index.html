@@ -1,0 +1,2139 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AEROSAT - Satellite Mission & Telemetry Management System</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  
+  <!-- Google Fonts: Orbitron & Rajdhani for NASA/SpaceX Aerospace UI -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&family=Space+Grotesk:wght@300;400;600&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Orbitron', 'sans-serif'],
+            sans: ['Rajdhani', 'sans-serif'],
+            mono: ['Space Grotesk', 'monospace'],
+          },
+          colors: {
+            space: {
+              950: '#030712',
+              900: '#070d1e',
+              850: '#0c152e',
+              800: '#0f1d42',
+              700: '#1e293b',
+            },
+            hud: {
+              cyan: '#00f0ff',
+              emerald: '#00ff9d',
+              amber: '#ffb703',
+              rose: '#ff0055',
+              violet: '#a855f7',
+            }
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'spin-slow': 'spin 20s linear infinite',
+            'radar-sweep': 'sweep 4s linear infinite',
+          },
+          keyframes: {
+            sweep: {
+              '0%': { transform: 'rotate(0deg)' },
+              '100%': { transform: 'rotate(360deg)' }
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Aerospace UI Styling */
+    body {
+      background-color: #030712;
+      color: #e2e8f0;
+      font-family: 'Rajdhani', sans-serif;
+      overflow-x: hidden;
+    }
+    
+    .font-orbitron { font-family: 'Orbitron', sans-serif; }
+    .font-mono-code { font-family: 'Space Grotesk', monospace; }
+
+    /* Glassmorphism Classes */
+    .glass-panel {
+      background: rgba(7, 13, 30, 0.72);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 240, 255, 0.18);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.55), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .glass-panel-glow {
+      background: rgba(12, 21, 46, 0.8);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(0, 240, 255, 0.35);
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.12), inset 0 0 12px rgba(0, 240, 255, 0.05);
+    }
+
+    .glass-card {
+      background: rgba(15, 29, 66, 0.55);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transition: all 0.3s ease;
+    }
+    .glass-card:hover {
+      border-color: rgba(0, 240, 255, 0.4);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px -5px rgba(0, 240, 255, 0.15);
+    }
+
+    /* Scanline effect */
+    .scanline {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+      background-size: 100% 3px, 6px 100%;
+      pointer-events: none;
+      z-index: 99;
+      opacity: 0.65;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(3, 7, 18, 0.8);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 240, 255, 0.3);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 240, 255, 0.6);
+    }
+
+    /* Glow text */
+    .glow-cyan { text-shadow: 0 0 10px rgba(0, 240, 255, 0.6); }
+    .glow-emerald { text-shadow: 0 0 10px rgba(0, 255, 157, 0.6); }
+    .glow-rose { text-shadow: 0 0 10px rgba(255, 0, 85, 0.6); }
+    .glow-amber { text-shadow: 0 0 10px rgba(255, 183, 3, 0.6); }
+
+    /* Radar scan canvas */
+    #orbitMapCanvas {
+      background: radial-gradient(circle at center, rgba(14, 30, 66, 0.4) 0%, rgba(3, 7, 18, 0.85) 100%);
+    }
+  </style>
+</head>
+<body class="relative min-h-screen text-slate-200 antialiased selection:bg-cyan-500 selection:text-black">
+  
+  <!-- CRT Scanline overlay -->
+  <div class="scanline"></div>
+
+  <!-- Dynamic Background Container -->
+  <div id="dynamic-bg-container" class="fixed inset-0 z-0 bg-cover bg-center transition-all duration-700 pointer-events-none" style="background-image: url('assets/images/earth_orbit_spacecraft.jpg');">
+    <!-- Dark tint & radial vignette overlay -->
+    <div id="bg-overlay" class="absolute inset-0 bg-space-950/80 backdrop-blur-[2px] transition-all duration-500"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-space-950/60 to-space-950"></div>
+    <!-- Star grid pattern -->
+    <div class="absolute inset-0 bg-[linear-gradient(to_right,#00f0ff08_1px,transparent_1px),linear-gradient(to_bottom,#00f0ff08_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
+  </div>
+
+  <!-- App Wrapper -->
+  <div class="relative z-10 flex flex-col min-h-screen">
+    
+    <!-- Top Global Header / HUD Status Bar -->
+    <header class="sticky top-0 z-50 glass-panel border-b border-cyan-500/30 px-4 lg:px-8 py-2.5">
+      <div class="max-w-[1720px] mx-auto flex flex-wrap items-center justify-between gap-4">
+        
+        <!-- Brand & System Status -->
+        <div class="flex items-center gap-3.5">
+          <div class="relative flex items-center justify-center w-10 h-10 rounded-lg bg-cyan-950/60 border border-cyan-400/50 shadow-[0_0_15px_rgba(0,240,255,0.3)]">
+            <i class="fa-solid fa-satellite text-cyan-400 text-lg animate-pulse"></i>
+            <span class="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="font-orbitron font-extrabold text-base md:text-lg tracking-wider text-white glow-cyan">
+                AEROSAT<span class="text-cyan-400 text-xs ml-1 font-semibold border border-cyan-500/40 px-1.5 py-0.5 rounded bg-cyan-950/40">SYS-V2.4</span>
+              </h1>
+              <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span> ALL SYSTEMS NOMINAL
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400 font-mono-code tracking-tight">SATELLITE MISSION & TELEMETRY CONTROL MATRIX</p>
+          </div>
+        </div>
+
+        <!-- Telemetry Clocks (UTC / MET) -->
+        <div class="hidden md:flex items-center gap-6 px-4 py-1.5 rounded-lg bg-space-900/60 border border-slate-700/50">
+          <div class="text-left">
+            <span class="text-[10px] text-slate-400 uppercase tracking-widest block font-mono-code">UTC TIME (ZULU)</span>
+            <span id="utc-clock" class="font-mono-code text-cyan-400 font-semibold text-sm">--:--:-- UTC</span>
+          </div>
+          <div class="w-px h-7 bg-slate-700/60"></div>
+          <div class="text-left">
+            <span class="text-[10px] text-slate-400 uppercase tracking-widest block font-mono-code">MISSION ELAPSED</span>
+            <span id="met-clock" class="font-mono-code text-emerald-400 font-semibold text-sm">T+ 148d 06:22:15</span>
+          </div>
+          <div class="w-px h-7 bg-slate-700/60"></div>
+          <div class="text-left">
+            <span class="text-[10px] text-slate-400 uppercase tracking-widest block font-mono-code">DATA RATE</span>
+            <span id="uplink-rate" class="font-mono-code text-violet-400 font-semibold text-sm">1.24 Gbps <i class="fa-solid fa-arrow-down text-xs"></i></span>
+          </div>
+        </div>
+
+        <!-- Right Controls: Audio Synth, Wallpaper Switcher, Quick Action -->
+        <div class="flex items-center gap-2.5">
+          
+          <!-- Wallpaper Switcher Dropdown Button -->
+          <div class="relative group">
+            <button id="bgMenuBtn" class="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-600/60 text-slate-200 transition">
+              <i class="fa-solid fa-image text-cyan-400"></i>
+              <span class="hidden sm:inline">Space Wallpaper</span>
+              <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
+            </button>
+            
+            <!-- Dropdown Menu -->
+            <div id="bgDropdown" class="hidden absolute right-0 mt-2 w-72 p-3 rounded-xl glass-panel-glow z-50 shadow-2xl space-y-2 border border-cyan-500/40">
+              <div class="flex items-center justify-between pb-2 border-b border-slate-700/60">
+                <span class="text-xs font-orbitron font-semibold text-cyan-300">Select HUD Background</span>
+                <span class="text-[10px] text-slate-400">5 Space Views</span>
+              </div>
+              <div class="grid grid-cols-1 gap-1.5 max-h-60 overflow-y-auto pr-1">
+                <button onclick="changeBackground('assets/images/earth_orbit_spacecraft.jpg', 'Spacecraft High Orbit')" class="flex items-center gap-2.5 p-2 rounded-lg text-left hover:bg-cyan-500/20 text-xs text-slate-200 group transition">
+                  <div class="w-8 h-8 rounded bg-cover bg-center border border-cyan-500/40 shrink-0" style="background-image: url('assets/images/earth_orbit_spacecraft.jpg');"></div>
+                  <div>
+                    <div class="font-semibold text-white">Earth Orbit Overpass</div>
+                    <div class="text-[10px] text-cyan-400">Spacecraft & Blue Ocean</div>
+                  </div>
+                </button>
+                <button onclick="changeBackground('assets/images/cupola_earth_view.jpg', 'Station Cupola Dome')" class="flex items-center gap-2.5 p-2 rounded-lg text-left hover:bg-cyan-500/20 text-xs text-slate-200 group transition">
+                  <div class="w-8 h-8 rounded bg-cover bg-center border border-cyan-500/40 shrink-0" style="background-image: url('assets/images/cupola_earth_view.jpg');"></div>
+                  <div>
+                    <div class="font-semibold text-white">ISS Cupola Observatory</div>
+                    <div class="text-[10px] text-cyan-400">Orbital Window Dome</div>
+                  </div>
+                </button>
+                <button onclick="changeBackground('assets/images/rocket_hangar_facility.jpg', 'Rocket Booster Integration')" class="flex items-center gap-2.5 p-2 rounded-lg text-left hover:bg-cyan-500/20 text-xs text-slate-200 group transition">
+                  <div class="w-8 h-8 rounded bg-cover bg-center border border-cyan-500/40 shrink-0" style="background-image: url('assets/images/rocket_hangar_facility.jpg');"></div>
+                  <div>
+                    <div class="font-semibold text-white">Rocket Assembly Hangar</div>
+                    <div class="text-[10px] text-cyan-400">SpaceX Propulsion Bay</div>
+                  </div>
+                </button>
+                <button onclick="changeBackground('assets/images/dual_satellites_constellation.jpg', 'Dual Satellite Constellation')" class="flex items-center gap-2.5 p-2 rounded-lg text-left hover:bg-cyan-500/20 text-xs text-slate-200 group transition">
+                  <div class="w-8 h-8 rounded bg-cover bg-center border border-cyan-500/40 shrink-0" style="background-image: url('assets/images/dual_satellites_constellation.jpg');"></div>
+                  <div>
+                    <div class="font-semibold text-white">Satellite Constellation</div>
+                    <div class="text-[10px] text-cyan-400">Twin Satellites in Orbit</div>
+                  </div>
+                </button>
+                <button onclick="changeBackground('assets/images/lunar_surface_footprint.jpg', 'Lunar Regolith Footprint')" class="flex items-center gap-2.5 p-2 rounded-lg text-left hover:bg-cyan-500/20 text-xs text-slate-200 group transition">
+                  <div class="w-8 h-8 rounded bg-cover bg-center border border-cyan-500/40 shrink-0" style="background-image: url('assets/images/lunar_surface_footprint.jpg');"></div>
+                  <div>
+                    <div class="font-semibold text-white">Apollo Lunar Surface</div>
+                    <div class="text-[10px] text-cyan-400">Historic Regolith Bootprint</div>
+                  </div>
+                </button>
+              </div>
+
+              <!-- Opacity & Blur Sliders -->
+              <div class="pt-2 border-t border-slate-700/60 space-y-1.5">
+                <div class="flex justify-between text-[11px] text-slate-300">
+                  <span>Background Dimming</span>
+                  <span id="dimVal" class="text-cyan-400 font-mono-code">80%</span>
+                </div>
+                <input type="range" id="dimRange" min="20" max="95" value="80" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400" oninput="adjustDimming(this.value)">
+              </div>
+            </div>
+          </div>
+
+          <!-- Audio FX synth button -->
+          <button id="soundToggleBtn" onclick="toggleAudio()" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-600/60 text-slate-300 hover:text-cyan-300 transition" title="Toggle Synthesizer Sound FX">
+            <i id="soundIcon" class="fa-solid fa-volume-high text-cyan-400"></i>
+          </button>
+
+          <!-- Register Satellite Modal Button -->
+          <button onclick="openModal('newSatelliteModal')" class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-orbitron font-bold rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black shadow-[0_0_15px_rgba(0,240,255,0.4)] transition">
+            <i class="fa-solid fa-plus text-xs"></i>
+            <span class="hidden sm:inline">Add Satellite</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs Bar -->
+      <nav class="max-w-[1720px] mx-auto mt-2.5 pt-2 border-t border-slate-800/80 flex items-center gap-1 overflow-x-auto pb-1 text-xs">
+        <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn px-3 py-1.5 rounded-md font-orbitron font-semibold flex items-center gap-2 transition bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-[0_0_10px_rgba(0,240,255,0.2)]">
+          <i class="fa-solid fa-chart-line"></i> Mission Control HUD
+        </button>
+        <button onclick="switchTab('fleet')" id="tab-fleet" class="tab-btn px-3 py-1.5 rounded-md font-orbitron font-semibold flex items-center gap-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent">
+          <i class="fa-solid fa-satellite"></i> Satellite Fleet <span id="fleetCountBadge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-cyan-400 font-mono-code">5</span>
+        </button>
+        <button onclick="switchTab('telemetry')" id="tab-telemetry" class="tab-btn px-3 py-1.5 rounded-md font-orbitron font-semibold flex items-center gap-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent">
+          <i class="fa-solid fa-wave-square"></i> Realtime Telemetry
+        </button>
+        <button onclick="switchTab('missions')" id="tab-missions" class="tab-btn px-3 py-1.5 rounded-md font-orbitron font-semibold flex items-center gap-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent">
+          <i class="fa-solid fa-shuttle-space"></i> Missions
+        </button>
+        <button onclick="switchTab('groundstations')" id="tab-groundstations" class="tab-btn px-3 py-1.5 rounded-md font-orbitron font-semibold flex items-center gap-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent">
+          <i class="fa-solid fa-tower-broadcast"></i> Ground Stations
+        </button>
+        <button onclick="switchTab('maintenance')" id="tab-maintenance" class="tab-btn px-3 py-1.5 rounded-md font-orbitron font-semibold flex items-center gap-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent">
+          <i class="fa-solid fa-screwdriver-wrench"></i> Health & Maintenance
+        </button>
+        <button onclick="switchTab('schema')" id="tab-schema" class="tab-btn px-3 py-1.5 rounded-md font-orbitron font-semibold flex items-center gap-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent">
+          <i class="fa-solid fa-database"></i> Relational Schema & ERD
+        </button>
+      </nav>
+    </header>
+
+    <!-- MAIN CONTENT VIEWPORTS -->
+    <main class="flex-1 max-w-[1720px] w-full mx-auto p-4 lg:p-6 space-y-6">
+      
+      <!-- ========================================== -->
+      <!-- VIEW 1: MISSION CONTROL HUD DASHBOARD      -->
+      <!-- ========================================== -->
+      <section id="view-dashboard" class="space-y-6">
+        
+        <!-- Top Stats Row (KPI Counters) -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+          
+          <!-- Card 1 -->
+          <div class="glass-card p-3.5 rounded-xl relative overflow-hidden group">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-mono-code text-slate-400 uppercase">Operational Satellites</span>
+              <i class="fa-solid fa-satellite text-cyan-400"></i>
+            </div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span class="text-2xl font-orbitron font-bold text-white glow-cyan">4</span>
+              <span class="text-xs text-slate-400 font-mono-code">/ 5 Total</span>
+            </div>
+            <div class="mt-2 w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+              <div class="bg-cyan-400 h-full w-4/5"></div>
+            </div>
+          </div>
+
+          <!-- Card 2 -->
+          <div class="glass-card p-3.5 rounded-xl relative overflow-hidden group">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-mono-code text-slate-400 uppercase">Active Missions</span>
+              <i class="fa-solid fa-rocket text-emerald-400"></i>
+            </div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span class="text-2xl font-orbitron font-bold text-emerald-400 glow-emerald">3</span>
+              <span class="text-xs text-slate-400 font-mono-code">1 Scheduled</span>
+            </div>
+            <div class="mt-2 w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+              <div class="bg-emerald-400 h-full w-3/4"></div>
+            </div>
+          </div>
+
+          <!-- Card 3 -->
+          <div class="glass-card p-3.5 rounded-xl relative overflow-hidden group">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-mono-code text-slate-400 uppercase">Ground Station Links</span>
+              <i class="fa-solid fa-tower-broadcast text-violet-400"></i>
+            </div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span class="text-2xl font-orbitron font-bold text-violet-400">4</span>
+              <span class="text-xs text-slate-400 font-mono-code">Online (DSN)</span>
+            </div>
+            <div class="mt-2 w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+              <div class="bg-violet-400 h-full w-full"></div>
+            </div>
+          </div>
+
+          <!-- Card 4 -->
+          <div class="glass-card p-3.5 rounded-xl relative overflow-hidden group">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-mono-code text-slate-400 uppercase">Fleet Mean Health</span>
+              <i class="fa-solid fa-heart-pulse text-emerald-400"></i>
+            </div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span class="text-2xl font-orbitron font-bold text-white">91.4%</span>
+              <span class="text-[11px] text-emerald-400 font-mono-code">+0.8%</span>
+            </div>
+            <div class="mt-2 w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+              <div class="bg-emerald-400 h-full w-[91%]"></div>
+            </div>
+          </div>
+
+          <!-- Card 5 -->
+          <div class="glass-card p-3.5 rounded-xl relative overflow-hidden group">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-mono-code text-slate-400 uppercase">Active Anomalies</span>
+              <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
+            </div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span class="text-2xl font-orbitron font-bold text-amber-400 glow-amber">1</span>
+              <span class="text-xs text-amber-400/80 font-mono-code">1 Investigating</span>
+            </div>
+            <div class="mt-2 w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+              <div class="bg-amber-400 h-full w-1/4"></div>
+            </div>
+          </div>
+
+          <!-- Card 6 -->
+          <div class="glass-card p-3.5 rounded-xl relative overflow-hidden group">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-mono-code text-slate-400 uppercase">Daily Data Volume</span>
+              <i class="fa-solid fa-hard-drive text-cyan-400"></i>
+            </div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span class="text-2xl font-orbitron font-bold text-white">18.4</span>
+              <span class="text-xs text-slate-400 font-mono-code">GB Today</span>
+            </div>
+            <div class="mt-2 w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+              <div class="bg-cyan-400 h-full w-2/3"></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Middle Dashboard Grid: Orbit Radar & Live Telemetry Stream -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          <!-- Orbit Map Radar (8 Cols) -->
+          <div class="lg:col-span-8 glass-panel rounded-2xl p-5 relative overflow-hidden">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div class="flex items-center gap-2.5">
+                <span class="p-1.5 rounded-md bg-cyan-500/20 text-cyan-400 border border-cyan-500/40">
+                  <i class="fa-solid fa-earth-americas"></i>
+                </span>
+                <div>
+                  <h3 class="font-orbitron font-bold text-white text-base">Global Fleet Orbit Tracker & Ground Tracks</h3>
+                  <p class="text-xs text-slate-400 font-mono-code">Real-time Keplerian ephemeris calculation & sub-satellite footprint</p>
+                </div>
+              </div>
+
+              <!-- Satellite Selector on Map -->
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-slate-400 font-mono-code">Focus:</label>
+                <select id="mapFocusSelect" onchange="focusSatelliteMap(this.value)" class="bg-space-900 text-cyan-300 text-xs rounded-lg px-2.5 py-1 border border-cyan-500/40 font-mono-code focus:outline-none focus:border-cyan-400">
+                  <option value="ALL">ALL SATELLITES (5)</option>
+                  <option value="101">AEROSAT-1 (Sentinel Alpha)</option>
+                  <option value="102">NOVA-RELAY III</option>
+                  <option value="103">HELIOS-SOLAR</option>
+                  <option value="104">GEO-COM SAT-4</option>
+                  <option value="105">LUNAR-EXPLORER-X</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Radar / Orbit Canvas with HUD overlay -->
+            <div class="relative w-full h-[380px] rounded-xl overflow-hidden border border-cyan-500/30">
+              <canvas id="orbitMapCanvas" class="w-full h-full block"></canvas>
+              
+              <!-- HUD Grid Overlays -->
+              <div class="absolute top-3 left-3 pointer-events-none text-[11px] font-mono-code text-cyan-400/80 bg-space-950/70 p-2 rounded border border-cyan-500/30">
+                <div>PROJECTION: 2D EQUIRECTANGULAR / 2.5D ORBIT RING</div>
+                <div>TERMINATOR: SIMULATED SOLAR DAY/NIGHT</div>
+                <div>EPHEMERIS: SGP4 PROPAGATOR READY</div>
+              </div>
+
+              <div class="absolute bottom-3 right-3 pointer-events-none flex items-center gap-3 text-[11px] font-mono-code text-slate-300 bg-space-950/80 px-3 py-1.5 rounded-lg border border-slate-700/60">
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400"></span> LEO/SSO</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400"></span> GEO/MEO</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Ground Station</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Telemetry Tele-Matrix (4 Cols) -->
+          <div class="lg:col-span-4 glass-panel rounded-2xl p-5 flex flex-col justify-between space-y-4">
+            <div>
+              <div class="flex items-center justify-between pb-3 border-b border-slate-700/60">
+                <div class="flex items-center gap-2">
+                  <i class="fa-solid fa-satellite-dish text-cyan-400 animate-pulse"></i>
+                  <h3 class="font-orbitron font-bold text-white text-sm">Live Telemetry Gauges</h3>
+                </div>
+                <span id="selectedSatTelemetryBadge" class="text-[11px] font-mono-code text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/40">
+                  SAT-101 AEROSAT-1
+                </span>
+              </div>
+
+              <!-- Gauges Grid -->
+              <div class="grid grid-cols-2 gap-3 mt-4">
+                
+                <!-- Solar Array Temp -->
+                <div class="bg-space-900/80 p-3 rounded-xl border border-slate-700/60">
+                  <div class="flex justify-between text-xs text-slate-400">
+                    <span>Solar Temp</span>
+                    <i class="fa-solid fa-temperature-half text-cyan-400"></i>
+                  </div>
+                  <div class="mt-1 text-xl font-orbitron font-bold text-white" id="gauge-temp">24.2 °C</div>
+                  <div class="mt-1.5 text-[10px] text-emerald-400 font-mono-code">SAFE (-20° to +65°)</div>
+                </div>
+
+                <!-- Battery Charge -->
+                <div class="bg-space-900/80 p-3 rounded-xl border border-slate-700/60">
+                  <div class="flex justify-between text-xs text-slate-400">
+                    <span>Battery Level</span>
+                    <i class="fa-solid fa-battery-three-quarters text-emerald-400"></i>
+                  </div>
+                  <div class="mt-1 text-xl font-orbitron font-bold text-emerald-400" id="gauge-battery">88.5 %</div>
+                  <div class="mt-1.5 text-[10px] text-emerald-400 font-mono-code">CHARGING (Solar Array 1)</div>
+                </div>
+
+                <!-- Bus Voltage -->
+                <div class="bg-space-900/80 p-3 rounded-xl border border-slate-700/60">
+                  <div class="flex justify-between text-xs text-slate-400">
+                    <span>Bus Voltage</span>
+                    <i class="fa-solid fa-bolt text-amber-400"></i>
+                  </div>
+                  <div class="mt-1 text-xl font-orbitron font-bold text-white" id="gauge-voltage">28.4 V</div>
+                  <div class="mt-1.5 text-[10px] text-slate-400 font-mono-code">Regulated Bus ±0.2V</div>
+                </div>
+
+                <!-- Signal Strength -->
+                <div class="bg-space-900/80 p-3 rounded-xl border border-slate-700/60">
+                  <div class="flex justify-between text-xs text-slate-400">
+                    <span>RSSI Signal</span>
+                    <i class="fa-solid fa-signal text-cyan-400"></i>
+                  </div>
+                  <div class="mt-1 text-xl font-orbitron font-bold text-cyan-400" id="gauge-signal">-72 dBm</div>
+                  <div class="mt-1.5 text-[10px] text-emerald-400 font-mono-code">SNR: 18.5 dB (Nominal)</div>
+                </div>
+
+              </div>
+
+              <!-- Power Consumption Curve Mini Chart -->
+              <div class="mt-4 bg-space-900/60 p-3 rounded-xl border border-slate-700/60">
+                <div class="flex items-center justify-between text-xs mb-2">
+                  <span class="font-mono-code text-slate-300">Live Power Draw (Watts)</span>
+                  <span class="text-cyan-400 font-mono-code font-bold" id="gauge-power">420 W</span>
+                </div>
+                <div class="h-24 w-full">
+                  <canvas id="miniTelemetryChart"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- Uplink Action Toolbar -->
+            <div class="pt-3 border-t border-slate-700/60 flex items-center justify-between gap-2">
+              <button onclick="triggerSound('ping'); alert('Telemetry ping uplinked. Round-trip latency: 240ms.');" class="flex-1 py-1.5 px-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-center">
+                <i class="fa-solid fa-satellite-dish mr-1 text-cyan-400"></i> Ping Satellite
+              </button>
+              <button onclick="switchTab('telemetry')" class="flex-1 py-1.5 px-2 text-xs font-semibold rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-center">
+                <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i> Full Stream
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Lower Section: Active Comm Passes & Critical Anomaly Triage -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          <!-- Upcoming Ground Comm Passes (7 Cols) -->
+          <div class="lg:col-span-7 glass-panel rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-tower-broadcast text-emerald-400"></i>
+                <h3 class="font-orbitron font-bold text-white text-sm">Active & Upcoming Ground Station Passes</h3>
+              </div>
+              <span class="text-xs text-slate-400 font-mono-code">AOS / LOS Windows</span>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs font-mono-code">
+                <thead class="text-slate-400 bg-space-900/60 border-b border-slate-700">
+                  <tr>
+                    <th class="py-2.5 px-3">Satellite</th>
+                    <th class="py-2.5 px-3">Ground Station</th>
+                    <th class="py-2.5 px-3">AOS Time</th>
+                    <th class="py-2.5 px-3">LOS Time</th>
+                    <th class="py-2.5 px-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800 text-slate-200" id="dashboardCommTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Anomalies & Maintenance Alert Feed (5 Cols) -->
+          <div class="lg:col-span-5 glass-panel rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-bell text-amber-400 animate-pulse"></i>
+                <h3 class="font-orbitron font-bold text-white text-sm">Real-time Diagnostic Alerts</h3>
+              </div>
+              <button onclick="openModal('newAnomalyModal')" class="text-xs text-cyan-400 hover:text-cyan-300 font-mono-code">
+                + Report Anomaly
+              </button>
+            </div>
+
+            <div class="space-y-2.5 max-h-60 overflow-y-auto pr-1" id="dashboardAlertsFeed">
+              <!-- Injected by JS -->
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ========================================== -->
+      <!-- VIEW 2: SATELLITE FLEET MANAGEMENT        -->
+      <!-- ========================================== -->
+      <section id="view-fleet" class="hidden space-y-6">
+        
+        <!-- Fleet Controls Filter Bar -->
+        <div class="glass-panel p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="relative">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+              <input type="text" id="fleetSearchInput" oninput="renderFleetCards()" placeholder="Search satellite by name, type, manufacturer..." class="bg-space-900 text-xs text-white pl-8 pr-4 py-2 rounded-lg border border-slate-700 w-64 focus:outline-none focus:border-cyan-400 font-mono-code" />
+            </div>
+
+            <!-- Orbit Filter -->
+            <select id="fleetOrbitFilter" onchange="renderFleetCards()" class="bg-space-900 text-xs text-slate-300 py-2 px-3 rounded-lg border border-slate-700 font-mono-code focus:outline-none focus:border-cyan-400">
+              <option value="ALL">All Orbits</option>
+              <option value="LEO">LEO (Low Earth Orbit)</option>
+              <option value="SSO">SSO (Sun-Synchronous)</option>
+              <option value="GEO">GEO (Geostationary)</option>
+              <option value="MEO">MEO (Medium Earth Orbit)</option>
+              <option value="HEO">HEO (Molniya)</option>
+            </select>
+
+            <!-- Status Filter -->
+            <select id="fleetStatusFilter" onchange="renderFleetCards()" class="bg-space-900 text-xs text-slate-300 py-2 px-3 rounded-lg border border-slate-700 font-mono-code focus:outline-none focus:border-cyan-400">
+              <option value="ALL">All Statuses</option>
+              <option value="Operational">Operational</option>
+              <option value="Degraded">Degraded</option>
+              <option value="Critical">Critical</option>
+              <option value="Standby">Standby</option>
+            </select>
+          </div>
+
+          <button onclick="openModal('newSatelliteModal')" class="px-4 py-2 text-xs font-orbitron font-bold rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black flex items-center gap-2">
+            <i class="fa-solid fa-plus"></i> Register Spacecraft
+          </button>
+        </div>
+
+        <!-- Fleet Grid Cards -->
+        <div id="fleetGridContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- Injected via JS -->
+        </div>
+
+      </section>
+
+      <!-- ========================================== -->
+      <!-- VIEW 3: REAL-TIME TELEMETRY STREAM         -->
+      <!-- ========================================== -->
+      <section id="view-telemetry" class="hidden space-y-6">
+        
+        <!-- Stream Control Bar -->
+        <div class="glass-panel p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <label class="text-xs font-orbitron text-slate-300">Live Satellite Stream:</label>
+            <select id="telemetrySatSelect" onchange="changeTelemetryStreamSat(this.value)" class="bg-space-900 text-cyan-400 text-xs rounded-lg px-3 py-1.5 border border-cyan-500/40 font-mono-code focus:outline-none">
+              <option value="101">SAT-101 | AEROSAT-1 (Sentinel Alpha)</option>
+              <option value="102">SAT-102 | NOVA-RELAY III</option>
+              <option value="103">SAT-103 | HELIOS-SOLAR OBSERVER</option>
+              <option value="104">SAT-104 | GEO-COM SAT-4</option>
+              <option value="105">SAT-105 | LUNAR-EXPLORER-X</option>
+            </select>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <span class="flex items-center gap-1.5 text-xs font-mono-code text-emerald-400">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> STREAM ACTIVE (1000ms)
+            </span>
+            <button id="pauseStreamBtn" onclick="toggleTelemetryStream()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200">
+              <i class="fa-solid fa-pause mr-1"></i> Pause Stream
+            </button>
+            <button onclick="injectTelemetryAnomaly()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300">
+              <i class="fa-solid fa-bolt mr-1"></i> Simulate Telemetry Spike
+            </button>
+          </div>
+        </div>
+
+        <!-- Telemetry Charts (Dual Chart Matrix) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          
+          <!-- Chart 1: Temperature & Signal RSSI -->
+          <div class="glass-panel p-5 rounded-2xl space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="font-orbitron font-bold text-white text-sm">Thermal Profile & Signal RSSI</h4>
+                <p class="text-[11px] text-slate-400 font-mono-code">Solar array temperature (°C) & Downlink RSSI (dBm)</p>
+              </div>
+              <span class="text-xs text-cyan-400 font-mono-code">CH-01 / CH-04</span>
+            </div>
+            <div class="h-64 w-full">
+              <canvas id="streamChartThermal"></canvas>
+            </div>
+          </div>
+
+          <!-- Chart 2: Battery Voltage & Power Consumption -->
+          <div class="glass-panel p-5 rounded-2xl space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="font-orbitron font-bold text-white text-sm">EPS Power & Battery Voltage</h4>
+                <p class="text-[11px] text-slate-400 font-mono-code">Subsystem power draw (W) & Bus Voltage (V)</p>
+              </div>
+              <span class="text-xs text-emerald-400 font-mono-code">CH-02 / CH-03</span>
+            </div>
+            <div class="h-64 w-full">
+              <canvas id="streamChartPower"></canvas>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Live Telemetry Packets Log Stream -->
+        <div class="glass-panel p-5 rounded-2xl space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-terminal text-cyan-400"></i>
+              <h4 class="font-orbitron font-bold text-white text-sm">Raw Downlink Telemetry Packets (CCSDS Protocol)</h4>
+            </div>
+            <button onclick="clearPacketLogs()" class="text-xs text-slate-400 hover:text-slate-200 font-mono-code">Clear Feed</button>
+          </div>
+
+          <div class="bg-space-950/90 rounded-xl p-3 border border-slate-800 font-mono-code text-xs max-h-64 overflow-y-auto space-y-1.5" id="telemetryPacketStream">
+            <!-- Packets injected by live loop -->
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========================================== -->
+      <!-- VIEW 4: MISSIONS MANAGEMENT                -->
+      <!-- ========================================== -->
+      <section id="view-missions" class="hidden space-y-6">
+        
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-orbitron font-bold text-lg text-white">Active Spaceflight Missions</h3>
+            <p class="text-xs text-slate-400 font-mono-code">Mission objectives, milestone timelines, and assigned orbital craft</p>
+          </div>
+          <button onclick="openModal('newMissionModal')" class="px-3.5 py-1.5 text-xs font-orbitron font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black flex items-center gap-1.5">
+            <i class="fa-solid fa-plus"></i> Create Mission
+          </button>
+        </div>
+
+        <!-- Missions List Grid -->
+        <div id="missionsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- Injected via JS -->
+        </div>
+
+      </section>
+
+      <!-- ========================================== -->
+      <!-- VIEW 5: GROUND STATIONS & COMM PASSES      -->
+      <!-- ========================================== -->
+      <section id="view-groundstations" class="hidden space-y-6">
+        
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-orbitron font-bold text-lg text-white">Global Ground Station Tracking Network</h3>
+            <p class="text-xs text-slate-400 font-mono-code">NASA Deep Space Network (DSN) & Polar Uplink Facilities</p>
+          </div>
+          <button onclick="openModal('newGroundStationModal')" class="px-3.5 py-1.5 text-xs font-orbitron font-bold rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black flex items-center gap-1.5">
+            <i class="fa-solid fa-plus"></i> Add Ground Station
+          </button>
+        </div>
+
+        <!-- Ground Stations Grid -->
+        <div id="groundStationsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Injected via JS -->
+        </div>
+
+        <!-- Full Comm Log History -->
+        <div class="glass-panel p-5 rounded-2xl space-y-4">
+          <div class="flex items-center justify-between">
+            <h4 class="font-orbitron font-bold text-white text-sm">Historical Ground Communication Logs</h4>
+            <span class="text-xs text-slate-400 font-mono-code">Total Records: 6</span>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs font-mono-code">
+              <thead class="text-slate-400 bg-space-900/80 border-b border-slate-700">
+                <tr>
+                  <th class="py-2.5 px-3">Log ID</th>
+                  <th class="py-2.5 px-3">Satellite</th>
+                  <th class="py-2.5 px-3">Ground Station</th>
+                  <th class="py-2.5 px-3">AOS Time</th>
+                  <th class="py-2.5 px-3">LOS Time</th>
+                  <th class="py-2.5 px-3">Data Received</th>
+                  <th class="py-2.5 px-3">Pass Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800 text-slate-200" id="fullCommLogsTableBody">
+                <!-- Injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========================================== -->
+      <!-- VIEW 6: HEALTH & MAINTENANCE               -->
+      <!-- ========================================== -->
+      <section id="view-maintenance" class="hidden space-y-6">
+        
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-orbitron font-bold text-lg text-white">Subsystem Diagnostics & Maintenance Operations</h3>
+            <p class="text-xs text-slate-400 font-mono-code">Automated health scores, scheduled servicing, and anomaly mitigation logs</p>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="openModal('newMaintenanceModal')" class="px-3.5 py-1.5 text-xs font-orbitron font-bold rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black">
+              + Log Maintenance
+            </button>
+            <button onclick="openModal('newAnomalyModal')" class="px-3.5 py-1.5 text-xs font-orbitron font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-black">
+              + File Anomaly
+            </button>
+          </div>
+        </div>
+
+        <!-- Health Breakdown Matrix -->
+        <div id="healthScoreCards" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <!-- Injected by JS -->
+        </div>
+
+        <!-- Maintenance & Anomaly Tables -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          
+          <!-- Maintenance Log -->
+          <div class="glass-panel p-5 rounded-2xl space-y-4">
+            <h4 class="font-orbitron font-bold text-white text-sm flex items-center gap-2">
+              <i class="fa-solid fa-wrench text-cyan-400"></i> Maintenance & Firmware Actions
+            </h4>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs font-mono-code">
+                <thead class="text-slate-400 bg-space-900 border-b border-slate-700">
+                  <tr>
+                    <th class="py-2 px-2">Satellite</th>
+                    <th class="py-2 px-2">Action</th>
+                    <th class="py-2 px-2">Operator</th>
+                    <th class="py-2 px-2">Cost (USD)</th>
+                    <th class="py-2 px-2">Date</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800 text-slate-300" id="maintenanceTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Anomalies Triage -->
+          <div class="glass-panel p-5 rounded-2xl space-y-4">
+            <h4 class="font-orbitron font-bold text-white text-sm flex items-center gap-2">
+              <i class="fa-solid fa-triangle-exclamation text-amber-400"></i> Active Anomaly Resolution Board
+            </h4>
+            <div class="space-y-3" id="anomaliesBoard">
+              <!-- Injected by JS -->
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ========================================== -->
+      <!-- VIEW 7: DATABASE SCHEMA & ERD EXPLORER     -->
+      <!-- ========================================== -->
+      <section id="view-schema" class="hidden space-y-6">
+        
+        <div class="glass-panel p-5 rounded-2xl space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="font-orbitron font-bold text-lg text-white">Relational Database Schema & Architecture</h3>
+              <p class="text-xs text-slate-400 font-mono-code">Entity Relationship Diagram (ERD) mapping 9 core aerospace relational entities</p>
+            </div>
+            <span class="text-xs font-mono-code text-cyan-400 bg-cyan-950/60 px-3 py-1 rounded border border-cyan-500/40">
+              3NF NORMALIZED RELATIONAL MODEL
+            </span>
+          </div>
+
+          <!-- Schema Entities Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 font-mono-code text-xs">
+            
+            <!-- Entity: SATELLITE -->
+            <div class="bg-space-900/90 rounded-xl p-4 border border-cyan-500/40 space-y-2">
+              <div class="flex items-center justify-between pb-2 border-b border-cyan-500/30">
+                <span class="font-bold text-cyan-300 font-orbitron">SATELLITE</span>
+                <span class="text-[10px] text-cyan-400 bg-cyan-950 px-1.5 py-0.5 rounded">Core Entity</span>
+              </div>
+              <ul class="space-y-1 text-slate-300 text-[11px]">
+                <li class="text-rose-400 font-bold"><span class="bg-rose-950 px-1 rounded mr-1">PK</span> Satellite_ID : INT</li>
+                <li>Satellite_Name : VARCHAR(100)</li>
+                <li>Satellite_Type : VARCHAR(50)</li>
+                <li>Manufacturer : VARCHAR(100)</li>
+                <li>Launch_Date : DATE</li>
+                <li>Mass : DECIMAL(10,2)</li>
+                <li>Status : VARCHAR(20)</li>
+                <li class="text-cyan-400 font-semibold"><span class="bg-cyan-950 px-1 rounded mr-1">FK</span> Orbit_ID : INT (→ ORBIT)</li>
+              </ul>
+            </div>
+
+            <!-- Entity: ORBIT -->
+            <div class="bg-space-900/90 rounded-xl p-4 border border-slate-700 space-y-2">
+              <div class="flex items-center justify-between pb-2 border-b border-slate-700">
+                <span class="font-bold text-cyan-300 font-orbitron">ORBIT</span>
+                <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">1 : N Satellites</span>
+              </div>
+              <ul class="space-y-1 text-slate-300 text-[11px]">
+                <li class="text-rose-400 font-bold"><span class="bg-rose-950 px-1 rounded mr-1">PK</span> Orbit_ID : INT</li>
+                <li>Orbit_Type : VARCHAR(50)</li>
+                <li>Altitude : DECIMAL(10,2) (km)</li>
+                <li>Inclination : DECIMAL(6,2) (deg)</li>
+                <li>Eccentricity : DECIMAL(8,5)</li>
+                <li>Orbital_Period : DECIMAL(8,2) (min)</li>
+              </ul>
+            </div>
+
+            <!-- Entity: MISSION -->
+            <div class="bg-space-900/90 rounded-xl p-4 border border-emerald-500/40 space-y-2">
+              <div class="flex items-center justify-between pb-2 border-b border-emerald-500/30">
+                <span class="font-bold text-emerald-300 font-orbitron">MISSION</span>
+                <span class="text-[10px] text-emerald-400 bg-emerald-950 px-1.5 py-0.5 rounded">1 : N Satellites</span>
+              </div>
+              <ul class="space-y-1 text-slate-300 text-[11px]">
+                <li class="text-rose-400 font-bold"><span class="bg-rose-950 px-1 rounded mr-1">PK</span> Mission_ID : INT</li>
+                <li>Mission_Name : VARCHAR(100)</li>
+                <li>Mission_Type : VARCHAR(50)</li>
+                <li>Start_Date : DATE</li>
+                <li>End_Date : DATE</li>
+                <li>Mission_Status : VARCHAR(20)</li>
+                <li>Mission_Objective : TEXT</li>
+                <li class="text-cyan-400 font-semibold"><span class="bg-cyan-950 px-1 rounded mr-1">FK</span> Satellite_ID : INT (→ SATELLITE)</li>
+              </ul>
+            </div>
+
+            <!-- Entity: TELEMETRY -->
+            <div class="bg-space-900/90 rounded-xl p-4 border border-slate-700 space-y-2">
+              <div class="flex items-center justify-between pb-2 border-b border-slate-700">
+                <span class="font-bold text-cyan-300 font-orbitron">TELEMETRY</span>
+                <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">High Volume</span>
+              </div>
+              <ul class="space-y-1 text-slate-300 text-[11px]">
+                <li class="text-rose-400 font-bold"><span class="bg-rose-950 px-1 rounded mr-1">PK</span> Telemetry_ID : BIGINT</li>
+                <li class="text-cyan-400 font-semibold"><span class="bg-cyan-950 px-1 rounded mr-1">FK</span> Satellite_ID : INT (→ SATELLITE)</li>
+                <li>Timestamp : DATETIME</li>
+                <li>Temperature : DECIMAL(6,2)</li>
+                <li>Battery_Level : DECIMAL(5,2)</li>
+                <li>Voltage : DECIMAL(6,2)</li>
+                <li>Power_Consumption : DECIMAL(8,2)</li>
+                <li>Signal_Strength : DECIMAL(6,2)</li>
+                <li>Position / Orientation : VARCHAR</li>
+              </ul>
+            </div>
+
+            <!-- Entity: GROUND_STATION -->
+            <div class="bg-space-900/90 rounded-xl p-4 border border-slate-700 space-y-2">
+              <div class="flex items-center justify-between pb-2 border-b border-slate-700">
+                <span class="font-bold text-cyan-300 font-orbitron">GROUND_STATION</span>
+                <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">Earth Segment</span>
+              </div>
+              <ul class="space-y-1 text-slate-300 text-[11px]">
+                <li class="text-rose-400 font-bold"><span class="bg-rose-950 px-1 rounded mr-1">PK</span> Station_ID : INT</li>
+                <li>Station_Name : VARCHAR(100)</li>
+                <li>Latitude : DECIMAL(9,6)</li>
+                <li>Longitude : DECIMAL(9,6)</li>
+                <li>Elevation_Meters : INT</li>
+                <li>Antenna_Size_Meters : DECIMAL(6,2)</li>
+              </ul>
+            </div>
+
+            <!-- Entity: COMMUNICATION_LOG -->
+            <div class="bg-space-900/90 rounded-xl p-4 border border-slate-700 space-y-2">
+              <div class="flex items-center justify-between pb-2 border-b border-slate-700">
+                <span class="font-bold text-cyan-300 font-orbitron">COMMUNICATION_LOG</span>
+                <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">Pass Downlink</span>
+              </div>
+              <ul class="space-y-1 text-slate-300 text-[11px]">
+                <li class="text-rose-400 font-bold"><span class="bg-rose-950 px-1 rounded mr-1">PK</span> Log_ID : INT</li>
+                <li class="text-cyan-400 font-semibold"><span class="bg-cyan-950 px-1 rounded mr-1">FK</span> Satellite_ID : INT (→ SATELLITE)</li>
+                <li class="text-cyan-400 font-semibold"><span class="bg-cyan-950 px-1 rounded mr-1">FK</span> Station_ID : INT (→ GROUND_STATION)</li>
+                <li>AOS_Time / LOS_Time : DATETIME</li>
+                <li>Data_Received_MB : DECIMAL(10,2)</li>
+                <li>Status : VARCHAR(20)</li>
+              </ul>
+            </div>
+
+          </div>
+
+          <!-- Interactive SQL Sandbox Console -->
+          <div class="mt-6 bg-space-950 rounded-xl p-4 border border-cyan-500/30 space-y-3 font-mono-code">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-code text-cyan-400"></i>
+                <span class="text-xs font-bold text-cyan-300">Live SQL Query Simulator</span>
+              </div>
+              <div class="flex gap-2">
+                <button onclick="runSampleSQL(1)" class="text-[11px] px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-300">Query 1: Critical Telemetry</button>
+                <button onclick="runSampleSQL(2)" class="text-[11px] px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-300">Query 2: Ground Passes</button>
+              </div>
+            </div>
+
+            <div class="relative">
+              <textarea id="sqlInput" rows="2" class="w-full bg-space-900 border border-slate-700 rounded-lg p-2.5 text-xs text-cyan-300 focus:outline-none focus:border-cyan-400 font-mono-code">SELECT Satellite_ID, Satellite_Name, Status, Mass FROM SATELLITE WHERE Status = 'Operational';</textarea>
+              <button onclick="executeSQLQuery()" class="absolute right-3 bottom-3 px-3 py-1 bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-bold rounded">
+                Execute SQL
+              </button>
+            </div>
+
+            <div id="sqlOutputContainer" class="p-3 bg-space-900/80 rounded-lg border border-slate-800 text-[11px] text-slate-300 overflow-x-auto max-h-48">
+              <!-- Query output -->
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Global Footer -->
+    <footer class="mt-auto border-t border-slate-800/80 glass-panel px-6 py-3 text-xs font-mono-code text-slate-400 flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        <span>AEROSAT Ground Operations Center &copy; 2026</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <span>SECURITY LEVEL: TOP SECRET // SCI</span>
+        <span class="text-cyan-400">ENCRYPTION: AES-256 GCM</span>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: REGISTER NEW SATELLITE              -->
+  <!-- ========================================== -->
+  <div id="newSatelliteModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+    <div class="glass-panel-glow max-w-xl w-full p-6 rounded-2xl border border-cyan-500/50 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-700">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-satellite text-cyan-400"></i>
+          <h3 class="font-orbitron font-bold text-white text-base">Register Spacecraft in Fleet Matrix</h3>
+        </div>
+        <button onclick="closeModal('newSatelliteModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <form onsubmit="handleNewSatellite(event)" class="space-y-3.5 text-xs font-mono-code">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">Satellite Name</label>
+            <input type="text" id="satNameInput" required placeholder="e.g. SENTINEL-X" class="w-full bg-space-900 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-cyan-400" />
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Satellite Type</label>
+            <select id="satTypeInput" class="w-full bg-space-900 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-cyan-400">
+              <option value="Earth Observation">Earth Observation</option>
+              <option value="Telecommunication">Telecommunication</option>
+              <option value="Scientific Research">Scientific Research</option>
+              <option value="Navigation / GNSS">Navigation / GNSS</option>
+              <option value="Deep Space Probe">Deep Space Probe</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">Manufacturer</label>
+            <input type="text" id="satManufacturerInput" required placeholder="e.g. SpaceX / ESA" class="w-full bg-space-900 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-cyan-400" />
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Launch Mass (kg)</label>
+            <input type="number" id="satMassInput" required placeholder="1400" class="w-full bg-space-900 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-cyan-400" />
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Target Orbit</label>
+            <select id="satOrbitInput" class="w-full bg-space-900 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-cyan-400">
+              <option value="1">LEO - 550 km</option>
+              <option value="2">SSO - 705 km</option>
+              <option value="3">GEO - 35,786 km</option>
+              <option value="4">MEO - 20,200 km</option>
+              <option value="5">HEO - Molniya</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1">Space Imagery Profile</label>
+          <select id="satImageInput" class="w-full bg-space-900 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-cyan-400">
+            <option value="assets/images/earth_orbit_spacecraft.jpg">Earth Orbit Spacecraft Overpass</option>
+            <option value="assets/images/dual_satellites_constellation.jpg">Dual Satellites Constellation</option>
+            <option value="assets/images/cupola_earth_view.jpg">ISS Cupola Observatory View</option>
+            <option value="assets/images/rocket_hangar_facility.jpg">Rocket Integration Hangar</option>
+            <option value="assets/images/lunar_surface_footprint.jpg">Lunar Surface Exploration</option>
+          </select>
+        </div>
+
+        <div class="pt-3 border-t border-slate-700 flex justify-end gap-2">
+          <button type="button" onclick="closeModal('newSatelliteModal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-lg">Initialize Spacecraft</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: REPORT ANOMALY                      -->
+  <!-- ========================================== -->
+  <div id="newAnomalyModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+    <div class="glass-panel-glow max-w-md w-full p-6 rounded-2xl border border-amber-500/50 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-700">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
+          <h3 class="font-orbitron font-bold text-white text-base">File Subsystem Anomaly</h3>
+        </div>
+        <button onclick="closeModal('newAnomalyModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <form onsubmit="handleNewAnomaly(event)" class="space-y-3.5 text-xs font-mono-code">
+        <div>
+          <label class="block text-slate-400 mb-1">Target Spacecraft</label>
+          <select id="anomalySatSelect" class="w-full bg-space-900 border border-slate-700 rounded-lg p-2 text-white">
+            <option value="101">SAT-101 (AEROSAT-1)</option>
+            <option value="102">SAT-102 (NOVA-RELAY III)</option>
+            <option value="103">SAT-103 (HELIOS-SOLAR)</option>
+            <option value="104">SAT-104 (GEO-COM SAT-4)</option>
+            <option value="105">SAT-105 (LUNAR-EXPLORER-X)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Anomaly Description</label>
+          <input type="text" id="anomalyTypeInput" required placeholder="e.g. Solar array motor stepping delay" class="w-full bg-space-900 border border-slate-700 rounded-lg p-2 text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Severity</label>
+          <select id="anomalySeverityInput" class="w-full bg-space-900 border border-slate-700 rounded-lg p-2 text-white">
+            <option value="Warning">Warning (Non-critical telemetry delta)</option>
+            <option value="Minor">Minor (Degraded subsystem)</option>
+            <option value="Major">Major (Partial mission impact)</option>
+            <option value="Critical">Critical (Immediate danger)</option>
+          </select>
+        </div>
+        <div class="pt-3 border-t border-slate-700 flex justify-end gap-2">
+          <button type="button" onclick="closeModal('newAnomalyModal')" class="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-lg">Raise Anomaly</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT APPLICATION LOGIC & STATE -->
+  <script>
+    // ==========================================
+    // 1. INITIAL DATABASE STATE & SEED DATA
+    // ==========================================
+    const db = {
+      orbits: [
+        { Orbit_ID: 1, Orbit_Type: 'LEO (Low Earth Orbit)', Altitude: 550.0, Inclination: 53.0, Eccentricity: 0.00014, Orbital_Period: 95.6 },
+        { Orbit_ID: 2, Orbit_Type: 'SSO (Sun-Synchronous)', Altitude: 705.0, Inclination: 98.2, Eccentricity: 0.00012, Orbital_Period: 98.8 },
+        { Orbit_ID: 3, Orbit_Type: 'GEO (Geostationary)', Altitude: 35786.0, Inclination: 0.05, Eccentricity: 0.00008, Orbital_Period: 1436.1 },
+        { Orbit_ID: 4, Orbit_Type: 'MEO (Medium Earth Orbit)', Altitude: 20200.0, Inclination: 55.0, Eccentricity: 0.00500, Orbital_Period: 718.0 },
+        { Orbit_ID: 5, Orbit_Type: 'HEO (Molniya Orbit)', Altitude: 39350.0, Inclination: 63.4, Eccentricity: 0.72000, Orbital_Period: 718.5 },
+      ],
+
+      satellites: [
+        {
+          Satellite_ID: 101,
+          Satellite_Name: 'AEROSAT-1 (Sentinel Alpha)',
+          Satellite_Type: 'Earth Observation',
+          Manufacturer: 'Airbus Defence & Space',
+          Launch_Date: '2023-04-12',
+          Mass: 1420.5,
+          Status: 'Operational',
+          Orbit_ID: 2,
+          Image_Url: 'assets/images/earth_orbit_spacecraft.jpg',
+          Health: 96,
+          Mission_Name: 'Earth Topography Mapping Phase II'
+        },
+        {
+          Satellite_ID: 102,
+          Satellite_Name: 'NOVA-RELAY III',
+          Satellite_Type: 'Telecommunication',
+          Manufacturer: 'SpaceX / Starlink Bus',
+          Launch_Date: '2022-11-08',
+          Mass: 860.0,
+          Status: 'Operational',
+          Orbit_ID: 1,
+          Image_Url: 'assets/images/dual_satellites_constellation.jpg',
+          Health: 94,
+          Mission_Name: 'Global Low-Latency Crosslink'
+        },
+        {
+          Satellite_ID: 103,
+          Satellite_Name: 'HELIOS-SOLAR OBSERVER',
+          Satellite_Type: 'Scientific Research',
+          Manufacturer: 'Northrop Grumman Aerospace',
+          Launch_Date: '2021-08-20',
+          Mass: 2150.0,
+          Status: 'Degraded',
+          Orbit_ID: 5,
+          Image_Url: 'assets/images/cupola_earth_view.jpg',
+          Health: 74,
+          Mission_Name: 'Solar Flare Corona Spectrometry'
+        },
+        {
+          Satellite_ID: 104,
+          Satellite_Name: 'GEO-COM SAT-4',
+          Satellite_Type: 'Telecommunication',
+          Manufacturer: 'Boeing Space Systems',
+          Launch_Date: '2020-03-15',
+          Mass: 4200.0,
+          Status: 'Operational',
+          Orbit_ID: 3,
+          Image_Url: 'assets/images/rocket_hangar_facility.jpg',
+          Health: 98,
+          Mission_Name: 'Trans-Pacific High-Throughput Comms'
+        },
+        {
+          Satellite_ID: 105,
+          Satellite_Name: 'LUNAR-EXPLORER-X',
+          Satellite_Type: 'Deep Space Probe',
+          Manufacturer: 'NASA / Lockheed Martin',
+          Launch_Date: '2024-01-10',
+          Mass: 1850.0,
+          Status: 'Operational',
+          Orbit_ID: 4,
+          Image_Url: 'assets/images/lunar_surface_footprint.jpg',
+          Health: 95,
+          Mission_Name: 'Artemis South Pole Water-Ice Prospecting'
+        }
+      ],
+
+      missions: [
+        {
+          Mission_ID: 201,
+          Mission_Name: 'Sentinel High-Res Topography Phase II',
+          Mission_Type: 'Earth Observation',
+          Start_Date: '2023-05-01',
+          End_Date: '2027-12-31',
+          Mission_Status: 'Active',
+          Mission_Objective: 'Global 0.5m resolution radar surface topography and maritime ice monitoring.',
+          Satellite_ID: 101,
+          Progress: 68,
+          Image_Url: 'assets/images/earth_orbit_spacecraft.jpg'
+        },
+        {
+          Mission_ID: 202,
+          Mission_Name: 'Optical Inter-Satellite Crosslink Constellation',
+          Mission_Type: 'Telecommunication',
+          Start_Date: '2022-12-01',
+          End_Date: '2028-10-31',
+          Mission_Status: 'Active',
+          Mission_Objective: 'Ultra-low latency laser relay between LEO nodes and Arctic polar ground stations.',
+          Satellite_ID: 102,
+          Progress: 82,
+          Image_Url: 'assets/images/dual_satellites_constellation.jpg'
+        },
+        {
+          Mission_ID: 203,
+          Mission_Name: 'Artemis South Pole Polar Surveyor',
+          Mission_Type: 'Lunar Exploration',
+          Start_Date: '2024-02-15',
+          End_Date: '2026-08-30',
+          Mission_Status: 'Active',
+          Mission_Objective: 'Spectrometric neutron detection for sub-surface water ice deposits in Shackleton crater.',
+          Satellite_ID: 105,
+          Progress: 45,
+          Image_Url: 'assets/images/lunar_surface_footprint.jpg'
+        }
+      ],
+
+      groundStations: [
+        { Station_ID: 1, Station_Name: 'Goldstone Deep Space Comm (GDSCC)', Latitude: 35.4267, Longitude: -116.8900, Elevation_Meters: 1035, Antenna_Size_Meters: 70.0, Status: 'Online' },
+        { Station_ID: 2, Station_Name: 'Madrid Deep Space Comm Complex (MDSCC)', Latitude: 40.4314, Longitude: -4.2480, Elevation_Meters: 834, Antenna_Size_Meters: 70.0, Status: 'Online' },
+        { Station_ID: 3, Station_Name: 'Canberra Deep Space Complex (CDSCC)', Latitude: -35.4014, Longitude: 148.9817, Elevation_Meters: 650, Antenna_Size_Meters: 70.0, Status: 'Online' },
+        { Station_ID: 4, Station_Name: 'Svalbard Satellite Station (SvalSat)', Latitude: 78.2297, Longitude: 15.4077, Elevation_Meters: 450, Antenna_Size_Meters: 13.0, Status: 'Online' }
+      ],
+
+      commLogs: [
+        { Log_ID: 501, Satellite_ID: 101, Station_ID: 4, AOS_Time: '15:42:10 UTC', LOS_Time: '15:56:45 UTC', Data_Received_MB: 4820.5, Status: 'Active Pass' },
+        { Log_ID: 502, Satellite_ID: 102, Station_ID: 1, AOS_Time: '16:10:00 UTC', LOS_Time: '16:22:30 UTC', Data_Received_MB: 2150.0, Status: 'Scheduled' },
+        { Log_ID: 503, Satellite_ID: 105, Station_ID: 2, AOS_Time: '14:20:00 UTC', LOS_Time: '15:15:00 UTC', Data_Received_MB: 8430.0, Status: 'Completed' },
+        { Log_ID: 504, Satellite_ID: 104, Station_ID: 3, AOS_Time: 'Continuous', LOS_Time: 'GEO Lock', Data_Received_MB: 12400.0, Status: 'Active Pass' }
+      ],
+
+      anomalies: [
+        { Anomaly_ID: 901, Satellite_ID: 103, Anomaly_Type: 'Reaction Wheel #2 Hall Sensor jitter & thermal drift', Severity: 'Major', Resolution_Status: 'Investigating', Detected_At: '2026-10-06 14:18 UTC', Cause: 'Bearing degradation under high angular momentum' },
+        { Anomaly_ID: 902, Satellite_ID: 101, Anomaly_Type: 'X-Band Downlink packet checksum CRC mismatch (0.02%)', Severity: 'Minor', Resolution_Status: 'Mitigated', Detected_At: '2026-10-05 09:32 UTC', Cause: 'Atmospheric tropospheric scintillation over Svalbard' },
+        { Anomaly_ID: 903, Satellite_ID: 102, Anomaly_Type: 'Solar panel #1 gimbal angle calibration offset', Severity: 'Warning', Resolution_Status: 'Resolved', Detected_At: '2026-10-04 18:40 UTC', Cause: 'Software encoder step discrepancy resolved via patch' }
+      ],
+
+      maintenance: [
+        { Record_ID: 701, Satellite_ID: 103, Action_Date: '2026-10-06', Action_Type: 'ADCS Reaction Wheel Firmware Patch v4.2', Description: 'Updated PID damping coefficients to isolate vibrating wheel.', Performed_By: 'Flight Controller Alex Vance', Cost_USD: 14500 },
+        { Record_ID: 702, Satellite_ID: 101, Action_Date: '2026-09-28', Action_Type: 'Orbital Station-Keeping Thruster Burn (Delta-V: 1.4 m/s)', Description: 'Corrected semi-major axis drift from atmospheric drag.', Performed_By: 'Orbital Dynamics Specialist Dr. K. Zhang', Cost_USD: 28000 },
+        { Record_ID: 703, Satellite_ID: 104, Action_Date: '2026-09-15', Action_Type: 'Transponder Battery Reconditioning Cycle', Description: 'Deep discharge & trickle charge cycle to eliminate memory effect.', Performed_By: 'Power Engineer Sarah Chen', Cost_USD: 8200 }
+      ]
+    };
+
+    // ==========================================
+    // 2. AUDIO SYNTHESIZER (WEB AUDIO API)
+    // ==========================================
+    let audioCtx = null;
+    let audioEnabled = true;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function toggleAudio() {
+      audioEnabled = !audioEnabled;
+      const icon = document.getElementById('soundIcon');
+      if (audioEnabled) {
+        icon.className = 'fa-solid fa-volume-high text-cyan-400';
+        triggerSound('ping');
+      } else {
+        icon.className = 'fa-solid fa-volume-xmark text-slate-500';
+      }
+    }
+
+    function triggerSound(type) {
+      if (!audioEnabled) return;
+      try {
+        initAudio();
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        const now = audioCtx.currentTime;
+        if (type === 'ping') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, now);
+          osc.frequency.exponentialRampToValueAtTime(1760, now + 0.15);
+          gain.gain.setValueAtTime(0.08, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+          osc.start(now);
+          osc.stop(now + 0.2);
+        } else if (type === 'beep') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(520, now);
+          gain.gain.setValueAtTime(0.05, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+          osc.start(now);
+          osc.stop(now + 0.08);
+        } else if (type === 'alert') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.setValueAtTime(330, now + 0.1);
+          gain.gain.setValueAtTime(0.08, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+          osc.start(now);
+          osc.stop(now + 0.3);
+        }
+      } catch (e) {
+        console.warn('Audio synthesis note:', e);
+      }
+    }
+
+    // ==========================================
+    // 3. DYNAMIC BACKGROUND SWITCHER & CONTROLS
+    // ==========================================
+    function changeBackground(imageUrl, name) {
+      const bgContainer = document.getElementById('dynamic-bg-container');
+      bgContainer.style.backgroundImage = `url('${imageUrl}')`;
+      triggerSound('ping');
+      document.getElementById('bgDropdown').classList.add('hidden');
+    }
+
+    function adjustDimming(val) {
+      const overlay = document.getElementById('bg-overlay');
+      const opacity = val / 100;
+      overlay.style.backgroundColor = `rgba(3, 7, 18, ${opacity})`;
+      document.getElementById('dimVal').innerText = `${val}%`;
+    }
+
+    // Wallpaper dropdown toggle
+    document.getElementById('bgMenuBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const dropdown = document.getElementById('bgDropdown');
+      dropdown.classList.toggle('hidden');
+      triggerSound('beep');
+    });
+
+    document.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('bgDropdown');
+      if (!dropdown.contains(e.target) && e.target.id !== 'bgMenuBtn') {
+        dropdown.classList.add('hidden');
+      }
+    });
+
+    // ==========================================
+    // 4. NAVIGATION & TAB SWITCHING
+    // ==========================================
+    const tabs = ['dashboard', 'fleet', 'telemetry', 'missions', 'groundstations', 'maintenance', 'schema'];
+
+    function switchTab(tabId) {
+      tabs.forEach(t => {
+        const view = document.getElementById(`view-${t}`);
+        const btn = document.getElementById(`tab-${t}`);
+        if (t === tabId) {
+          view.classList.remove('hidden');
+          btn.className = 'tab-btn px-3 py-1.5 rounded-md font-orbitron font-semibold flex items-center gap-2 transition bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-[0_0_10px_rgba(0,240,255,0.2)]';
+        } else {
+          view.classList.add('hidden');
+          btn.className = 'tab-btn px-3 py-1.5 rounded-md font-orbitron font-semibold flex items-center gap-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent';
+        }
+      });
+      triggerSound('beep');
+    }
+
+    // ==========================================
+    // 5. LIVE CLOCKS (UTC & MISSION ELAPSED TIME)
+    // ==========================================
+    function updateClocks() {
+      const now = new Date();
+      const utcStr = now.toISOString().substring(11, 19) + ' UTC';
+      document.getElementById('utc-clock').innerText = utcStr;
+    }
+    setInterval(updateClocks, 1000);
+    updateClocks();
+
+    // ==========================================
+    // 6. DASHBOARD ORBIT TRACKER 2D CANVAS
+    // ==========================================
+    const mapCanvas = document.getElementById('orbitMapCanvas');
+    const mapCtx = mapCanvas.getContext('2d');
+    let mapFocus = 'ALL';
+
+    function resizeCanvas() {
+      if (!mapCanvas) return;
+      mapCanvas.width = mapCanvas.parentElement.clientWidth;
+      mapCanvas.height = mapCanvas.parentElement.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    let orbitAngle = 0;
+    function drawOrbitMap() {
+      if (!mapCtx) return;
+      const w = mapCanvas.width;
+      const h = mapCanvas.height;
+
+      mapCtx.clearRect(0, 0, w, h);
+
+      // Draw subtle world map grid lines (Latitude / Longitude)
+      mapCtx.strokeStyle = 'rgba(0, 240, 255, 0.08)';
+      mapCtx.lineWidth = 1;
+      for (let x = 0; x < w; x += w / 12) {
+        mapCtx.beginPath();
+        mapCtx.moveTo(x, 0);
+        mapCtx.lineTo(x, h);
+        mapCtx.stroke();
+      }
+      for (let y = 0; y < h; y += h / 6) {
+        mapCtx.beginPath();
+        mapCtx.moveTo(0, y);
+        mapCtx.lineTo(w, y);
+        mapCtx.stroke();
+      }
+
+      // Equator line
+      mapCtx.strokeStyle = 'rgba(0, 240, 255, 0.25)';
+      mapCtx.setLineDash([4, 4]);
+      mapCtx.beginPath();
+      mapCtx.moveTo(0, h / 2);
+      mapCtx.lineTo(w, h / 2);
+      mapCtx.stroke();
+      mapCtx.setLineDash([]);
+
+      // Draw Ground Stations on Map
+      db.groundStations.forEach(gs => {
+        const x = ((gs.Longitude + 180) / 360) * w;
+        const y = ((90 - gs.Latitude) / 180) * h;
+
+        // Ground station radar ring
+        mapCtx.beginPath();
+        mapCtx.arc(x, y, 16, 0, Math.PI * 2);
+        mapCtx.strokeStyle = 'rgba(0, 255, 157, 0.25)';
+        mapCtx.stroke();
+
+        mapCtx.beginPath();
+        mapCtx.arc(x, y, 3.5, 0, Math.PI * 2);
+        mapCtx.fillStyle = '#00ff9d';
+        mapCtx.fill();
+
+        mapCtx.font = '9px "Space Grotesk", monospace';
+        mapCtx.fillStyle = '#a7f3d0';
+        mapCtx.fillText(gs.Station_Name.split(' ')[0], x + 6, y - 4);
+      });
+
+      // Draw Satellites & Sine Wave Ground Tracks
+      db.satellites.forEach((sat, idx) => {
+        if (mapFocus !== 'ALL' && mapFocus !== sat.Satellite_ID.toString()) return;
+
+        const phaseOffset = idx * 1.35;
+        const freq = sat.Orbit_ID === 3 ? 0.5 : (sat.Orbit_ID === 1 ? 2.5 : 1.8);
+        const amplitude = sat.Orbit_ID === 3 ? 15 : (h * 0.35);
+
+        // Ground track wave
+        mapCtx.beginPath();
+        mapCtx.strokeStyle = sat.Status === 'Degraded' ? 'rgba(255, 183, 3, 0.4)' : 'rgba(0, 240, 255, 0.35)';
+        mapCtx.lineWidth = 1.5;
+
+        for (let x = 0; x < w; x += 6) {
+          const y = (h / 2) + Math.sin((x / w) * Math.PI * 2 * freq + orbitAngle + phaseOffset) * amplitude;
+          if (x === 0) mapCtx.moveTo(x, y);
+          else mapCtx.lineTo(x, y);
+        }
+        mapCtx.stroke();
+
+        // Current Satellite Position along track
+        const curX = ((orbitAngle * 40 + idx * (w / 5)) % w);
+        const curY = (h / 2) + Math.sin((curX / w) * Math.PI * 2 * freq + orbitAngle + phaseOffset) * amplitude;
+
+        // Footprint coverage circle
+        mapCtx.beginPath();
+        mapCtx.arc(curX, curY, 28, 0, Math.PI * 2);
+        mapCtx.strokeStyle = 'rgba(0, 240, 255, 0.2)';
+        mapCtx.stroke();
+
+        // Satellite node dot
+        mapCtx.beginPath();
+        mapCtx.arc(curX, curY, 5, 0, Math.PI * 2);
+        mapCtx.fillStyle = sat.Status === 'Degraded' ? '#ffb703' : '#00f0ff';
+        mapCtx.fill();
+        mapCtx.shadowColor = '#00f0ff';
+        mapCtx.shadowBlur = 8;
+
+        // Label
+        mapCtx.font = 'bold 10px "Orbitron", sans-serif';
+        mapCtx.fillStyle = '#ffffff';
+        mapCtx.fillText(sat.Satellite_Name.split(' ')[0], curX + 8, curY + 3);
+        mapCtx.shadowBlur = 0;
+      });
+
+      orbitAngle += 0.003;
+      requestAnimationFrame(drawOrbitMap);
+    }
+    drawOrbitMap();
+
+    function focusSatelliteMap(satId) {
+      mapFocus = satId;
+      triggerSound('beep');
+    }
+
+    // ==========================================
+    // 7. CHART.JS TELEMETRY CHARTS INITIALIZATION
+    // ==========================================
+    let miniTelemetryChart = null;
+    let streamChartThermal = null;
+    let streamChartPower = null;
+
+    function initCharts() {
+      // Mini Power Chart on Dashboard HUD
+      const miniCtx = document.getElementById('miniTelemetryChart').getContext('2d');
+      miniTelemetryChart = new Chart(miniCtx, {
+        type: 'line',
+        data: {
+          labels: ['-50s', '-40s', '-30s', '-20s', '-10s', 'Now'],
+          datasets: [{
+            data: [410, 415, 412, 425, 418, 420],
+            borderColor: '#00f0ff',
+            backgroundColor: 'rgba(0, 240, 255, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 2,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { display: false },
+            y: {
+              display: true,
+              grid: { color: 'rgba(255,255,255,0.05)' },
+              ticks: { color: '#64748b', font: { size: 9 } }
+            }
+          }
+        }
+      });
+
+      // Stream Chart 1: Thermal & RSSI
+      const thermalCtx = document.getElementById('streamChartThermal').getContext('2d');
+      streamChartThermal = new Chart(thermalCtx, {
+        type: 'line',
+        data: {
+          labels: ['-10s', '-8s', '-6s', '-4s', '-2s', '0s'],
+          datasets: [
+            {
+              label: 'Solar Panel Temp (°C)',
+              data: [23.8, 24.0, 24.1, 24.2, 24.5, 24.2],
+              borderColor: '#00f0ff',
+              borderWidth: 2,
+              tension: 0.3,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Downlink RSSI (dBm)',
+              data: [-73, -72, -72, -71, -72, -72],
+              borderColor: '#ff0055',
+              borderWidth: 2,
+              borderDash: [4, 4],
+              tension: 0.3,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#94a3b8', font: { family: 'Space Grotesk', size: 11 } } }
+          },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } },
+            y: { position: 'left', grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#00f0ff', font: { size: 10 } } },
+            y1: { position: 'right', grid: { display: false }, ticks: { color: '#ff0055', font: { size: 10 } } }
+          }
+        }
+      });
+
+      // Stream Chart 2: Power & Voltage
+      const powerCtx = document.getElementById('streamChartPower').getContext('2d');
+      streamChartPower = new Chart(powerCtx, {
+        type: 'line',
+        data: {
+          labels: ['-10s', '-8s', '-6s', '-4s', '-2s', '0s'],
+          datasets: [
+            {
+              label: 'Power Draw (W)',
+              data: [415, 418, 422, 420, 425, 420],
+              borderColor: '#00ff9d',
+              backgroundColor: 'rgba(0, 255, 157, 0.08)',
+              fill: true,
+              borderWidth: 2,
+              tension: 0.3,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Bus Voltage (V)',
+              data: [28.4, 28.5, 28.4, 28.4, 28.6, 28.4],
+              borderColor: '#ffb703',
+              borderWidth: 2,
+              tension: 0.3,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#94a3b8', font: { family: 'Space Grotesk', size: 11 } } }
+          },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } },
+            y: { position: 'left', grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#00ff9d', font: { size: 10 } } },
+            y1: { position: 'right', grid: { display: false }, ticks: { color: '#ffb703', font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
+    // ==========================================
+    // 8. LIVE TELEMETRY SIMULATION LOOP
+    // ==========================================
+    let isStreaming = true;
+    let selectedSatId = 101;
+
+    function toggleTelemetryStream() {
+      isStreaming = !isStreaming;
+      const btn = document.getElementById('pauseStreamBtn');
+      if (isStreaming) {
+        btn.innerHTML = '<i class="fa-solid fa-pause mr-1"></i> Pause Stream';
+      } else {
+        btn.innerHTML = '<i class="fa-solid fa-play mr-1"></i> Resume Stream';
+      }
+      triggerSound('beep');
+    }
+
+    function changeTelemetryStreamSat(satId) {
+      selectedSatId = parseInt(satId);
+      const sat = db.satellites.find(s => s.Satellite_ID === selectedSatId);
+      if (sat) {
+        document.getElementById('selectedSatTelemetryBadge').innerText = `SAT-${sat.Satellite_ID} ${sat.Satellite_Name.split(' ')[0]}`;
+      }
+      triggerSound('ping');
+    }
+
+    function injectTelemetryAnomaly() {
+      triggerSound('alert');
+      const tempDelta = (Math.random() * 15 + 45).toFixed(1);
+      document.getElementById('gauge-temp').innerText = `${tempDelta} °C`;
+      alert(`⚠️ SIMULATION: Injected thermal anomaly on SAT-${selectedSatId}! Array temp spiked to ${tempDelta}°C.`);
+    }
+
+    setInterval(() => {
+      if (!isStreaming) return;
+
+      // Simulated noisy telemetry values
+      const currentTemp = (24.0 + (Math.random() * 1.8 - 0.9)).toFixed(1);
+      const currentBattery = (88.0 + (Math.random() * 0.8 - 0.4)).toFixed(1);
+      const currentVoltage = (28.4 + (Math.random() * 0.2 - 0.1)).toFixed(1);
+      const currentPower = Math.round(420 + (Math.random() * 20 - 10));
+      const currentSignal = Math.round(-72 + (Math.random() * 4 - 2));
+
+      // Update gauges on HUD
+      document.getElementById('gauge-temp').innerText = `${currentTemp} °C`;
+      document.getElementById('gauge-battery').innerText = `${currentBattery} %`;
+      document.getElementById('gauge-voltage').innerText = `${currentVoltage} V`;
+      document.getElementById('gauge-signal').innerText = `${currentSignal} dBm`;
+      document.getElementById('gauge-power').innerText = `${currentPower} W`;
+
+      // Update Chart Streams
+      if (streamChartThermal && streamChartPower) {
+        const timeLabel = new Date().toISOString().substring(17, 19) + 's';
+
+        // Thermal chart
+        streamChartThermal.data.labels.shift();
+        streamChartThermal.data.labels.push(timeLabel);
+        streamChartThermal.data.datasets[0].data.shift();
+        streamChartThermal.data.datasets[0].data.push(parseFloat(currentTemp));
+        streamChartThermal.data.datasets[1].data.shift();
+        streamChartThermal.data.datasets[1].data.push(currentSignal);
+        streamChartThermal.update('none');
+
+        // Power chart
+        streamChartPower.data.labels.shift();
+        streamChartPower.data.labels.push(timeLabel);
+        streamChartPower.data.datasets[0].data.shift();
+        streamChartPower.data.datasets[0].data.push(currentPower);
+        streamChartPower.data.datasets[1].data.shift();
+        streamChartPower.data.datasets[1].data.push(parseFloat(currentVoltage));
+        streamChartPower.update('none');
+
+        // Mini chart
+        if (miniTelemetryChart) {
+          miniTelemetryChart.data.datasets[0].data.shift();
+          miniTelemetryChart.data.datasets[0].data.push(currentPower);
+          miniTelemetryChart.update('none');
+        }
+      }
+
+      // Append Packet to Downlink Stream
+      const streamBox = document.getElementById('telemetryPacketStream');
+      if (streamBox) {
+        const hexSeq = Math.floor(Math.random() * 65535).toString(16).toUpperCase().padStart(4, '0');
+        const packetElem = document.createElement('div');
+        packetElem.className = 'flex items-center justify-between text-[11px] py-1 border-b border-slate-900';
+        packetElem.innerHTML = `
+          <span class="text-cyan-400">[${new Date().toISOString().substring(11, 19)}] PKT-#${hexSeq}</span>
+          <span class="text-slate-300">SAT-${selectedSatId} | T:${currentTemp}°C | V:${currentVoltage}V | PWR:${currentPower}W | RSSI:${currentSignal}dBm</span>
+          <span class="text-emerald-400 font-bold">CRC-OK</span>
+        `;
+        streamBox.insertBefore(packetElem, streamBox.firstChild);
+        if (streamBox.children.length > 25) {
+          streamBox.removeChild(streamBox.lastChild);
+        }
+      }
+    }, 1200);
+
+    function clearPacketLogs() {
+      const streamBox = document.getElementById('telemetryPacketStream');
+      if (streamBox) streamBox.innerHTML = '';
+      triggerSound('beep');
+    }
+
+    // ==========================================
+    // 9. RENDER DYNAMIC TABLES & VIEWS
+    // ==========================================
+    function renderDashboardCommTable() {
+      const tbody = document.getElementById('dashboardCommTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = db.commLogs.map(log => {
+        const sat = db.satellites.find(s => s.Satellite_ID === log.Satellite_ID);
+        const gs = db.groundStations.find(g => g.Station_ID === log.Station_ID);
+        const statusBadge = log.Status === 'Active Pass' 
+          ? '<span class="text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/40">Active Pass</span>'
+          : (log.Status === 'Scheduled' ? '<span class="text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/40">Scheduled</span>' : '<span class="text-slate-400 bg-slate-800 px-2 py-0.5 rounded">Completed</span>');
+        
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="py-2 px-3 font-semibold text-white">${sat ? sat.Satellite_Name.split(' ')[0] : 'SAT-' + log.Satellite_ID}</td>
+            <td class="py-2 px-3 text-slate-300">${gs ? gs.Station_Name.split(' ')[0] : 'Station ' + log.Station_ID}</td>
+            <td class="py-2 px-3 text-cyan-400">${log.AOS_Time}</td>
+            <td class="py-2 px-3 text-slate-400">${log.LOS_Time}</td>
+            <td class="py-2 px-3">${statusBadge}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderDashboardAlerts() {
+      const container = document.getElementById('dashboardAlertsFeed');
+      if (!container) return;
+      container.innerHTML = db.anomalies.map(anom => {
+        const sat = db.satellites.find(s => s.Satellite_ID === anom.Satellite_ID);
+        const isCritical = anom.Severity === 'Critical' || anom.Severity === 'Major';
+        return `
+          <div class="p-2.5 rounded-xl ${isCritical ? 'bg-amber-950/40 border border-amber-500/40' : 'bg-slate-900/60 border border-slate-700/60'} text-xs font-mono-code space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="font-bold ${isCritical ? 'text-amber-400' : 'text-cyan-400'}">${sat ? sat.Satellite_Name.split(' ')[0] : 'SAT'} • ${anom.Severity.toUpperCase()}</span>
+              <span class="text-[10px] text-slate-400">${anom.Resolution_Status}</span>
+            </div>
+            <p class="text-slate-300 text-[11px]">${anom.Anomaly_Type}</p>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderFleetCards() {
+      const container = document.getElementById('fleetGridContainer');
+      if (!container) return;
+      const search = document.getElementById('fleetSearchInput').value.toLowerCase();
+      const orbitFilter = document.getElementById('fleetOrbitFilter').value;
+      const statusFilter = document.getElementById('fleetStatusFilter').value;
+
+      const filtered = db.satellites.filter(sat => {
+        const orbit = db.orbits.find(o => o.Orbit_ID === sat.Orbit_ID);
+        const matchSearch = sat.Satellite_Name.toLowerCase().includes(search) || sat.Manufacturer.toLowerCase().includes(search) || sat.Satellite_Type.toLowerCase().includes(search);
+        const matchOrbit = orbitFilter === 'ALL' || (orbit && orbit.Orbit_Type.includes(orbitFilter));
+        const matchStatus = statusFilter === 'ALL' || sat.Status === statusFilter;
+        return matchSearch && matchOrbit && matchStatus;
+      });
+
+      container.innerHTML = filtered.map(sat => {
+        const orbit = db.orbits.find(o => o.Orbit_ID === sat.Orbit_ID);
+        const statusColor = sat.Status === 'Operational' ? 'emerald' : (sat.Status === 'Degraded' ? 'amber' : 'rose');
+        return `
+          <div class="glass-card rounded-2xl overflow-hidden border border-slate-700/60 flex flex-col justify-between group">
+            <div class="relative h-44 overflow-hidden bg-space-950">
+              <img src="${sat.Image_Url || 'assets/images/earth_orbit_spacecraft.jpg'}" alt="${sat.Satellite_Name}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+              <div class="absolute inset-0 bg-gradient-to-t from-space-950 via-space-950/40 to-transparent"></div>
+              
+              <div class="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono-code font-bold bg-${statusColor}-500/20 text-${statusColor}-400 border border-${statusColor}-500/40 backdrop-blur-md">
+                <span class="w-2 h-2 rounded-full bg-${statusColor}-400 animate-pulse"></span> ${sat.Status}
+              </div>
+
+              <div class="absolute top-3 right-3 text-xs font-mono-code font-bold text-white bg-space-900/80 px-2 py-0.5 rounded border border-slate-700">
+                SAT-ID: ${sat.Satellite_ID}
+              </div>
+
+              <div class="absolute bottom-3 left-3 right-3">
+                <h4 class="font-orbitron font-bold text-white text-base">${sat.Satellite_Name}</h4>
+                <p class="text-xs text-cyan-400 font-mono-code">${sat.Satellite_Type}</p>
+              </div>
+            </div>
+
+            <div class="p-4 space-y-3 font-mono-code text-xs">
+              <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-300">
+                <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800">
+                  <span class="text-slate-500 block">Orbit Regime</span>
+                  <span class="text-white font-semibold">${orbit ? orbit.Orbit_Type.split(' ')[0] : 'N/A'} (${orbit ? orbit.Altitude : ''} km)</span>
+                </div>
+                <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800">
+                  <span class="text-slate-500 block">Launch Mass</span>
+                  <span class="text-white font-semibold">${sat.Mass} kg</span>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between text-[11px]">
+                <span class="text-slate-400">Manufacturer</span>
+                <span class="text-slate-200 font-semibold">${sat.Manufacturer}</span>
+              </div>
+
+              <div class="flex items-center justify-between text-[11px]">
+                <span class="text-slate-400">Subsystem Health</span>
+                <span class="text-emerald-400 font-bold">${sat.Health}% Nominal</span>
+              </div>
+
+              <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                <div class="bg-emerald-400 h-full" style="width: ${sat.Health}%"></div>
+              </div>
+
+              <div class="pt-2 border-t border-slate-800 flex justify-between gap-2">
+                <button onclick="changeTelemetryStreamSat(${sat.Satellite_ID}); switchTab('telemetry');" class="flex-1 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg text-center font-semibold">
+                  <i class="fa-solid fa-wave-square mr-1"></i> Telemetry
+                </button>
+                <button onclick="changeBackground('${sat.Image_Url}', '${sat.Satellite_Name}')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg" title="Set background image">
+                  <i class="fa-solid fa-image"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderMissions() {
+      const container = document.getElementById('missionsContainer');
+      if (!container) return;
+      container.innerHTML = db.missions.map(m => {
+        const sat = db.satellites.find(s => s.Satellite_ID === m.Satellite_ID);
+        return `
+          <div class="glass-card rounded-2xl overflow-hidden border border-slate-700/60 flex flex-col justify-between">
+            <div class="relative h-40 overflow-hidden bg-space-950">
+              <img src="${m.Image_Url || 'assets/images/earth_orbit_spacecraft.jpg'}" alt="${m.Mission_Name}" class="w-full h-full object-cover" />
+              <div class="absolute inset-0 bg-gradient-to-t from-space-950 via-space-950/40 to-transparent"></div>
+              <div class="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[11px] font-mono-code font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 backdrop-blur-md">
+                ${m.Mission_Status}
+              </div>
+              <div class="absolute bottom-3 left-3 right-3">
+                <h4 class="font-orbitron font-bold text-white text-sm">${m.Mission_Name}</h4>
+                <p class="text-[11px] text-emerald-400 font-mono-code">Assigned: ${sat ? sat.Satellite_Name : 'SAT'}</p>
+              </div>
+            </div>
+            <div class="p-4 space-y-3 font-mono-code text-xs">
+              <p class="text-slate-300 text-[11px] leading-relaxed">${m.Mission_Objective}</p>
+              <div class="space-y-1">
+                <div class="flex justify-between text-[11px]">
+                  <span class="text-slate-400">Mission Timeline Progress</span>
+                  <span class="text-cyan-400 font-bold">${m.Progress}%</span>
+                </div>
+                <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                  <div class="bg-cyan-400 h-full" style="width: ${m.Progress}%"></div>
+                </div>
+              </div>
+              <div class="flex justify-between text-[10px] text-slate-400 pt-2 border-t border-slate-800">
+                <span>Start: ${m.Start_Date}</span>
+                <span>End: ${m.End_Date}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderGroundStations() {
+      const grid = document.getElementById('groundStationsGrid');
+      if (!grid) return;
+      grid.innerHTML = db.groundStations.map(gs => `
+        <div class="glass-card p-4 rounded-xl space-y-2 border border-slate-700/60 font-mono-code text-xs">
+          <div class="flex items-center justify-between">
+            <span class="font-orbitron font-bold text-white">${gs.Station_Name.split(' ')[0]}</span>
+            <span class="text-emerald-400 text-[10px] bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-500/30">ONLINE</span>
+          </div>
+          <div class="text-[11px] text-slate-400">${gs.Station_Name}</div>
+          <div class="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300 pt-1">
+            <div>Lat: ${gs.Latitude}°</div>
+            <div>Lon: ${gs.Longitude}°</div>
+            <div>Dish: ${gs.Antenna_Size_Meters}m</div>
+            <div>Alt: ${gs.Elevation_Meters}m</div>
+          </div>
+        </div>
+      `).join('');
+
+      const commTable = document.getElementById('fullCommLogsTableBody');
+      if (commTable) {
+        commTable.innerHTML = db.commLogs.map(log => {
+          const sat = db.satellites.find(s => s.Satellite_ID === log.Satellite_ID);
+          const gs = db.groundStations.find(g => g.Station_ID === log.Station_ID);
+          return `
+            <tr class="hover:bg-slate-800/40">
+              <td class="py-2 px-3 text-cyan-400">#${log.Log_ID}</td>
+              <td class="py-2 px-3 text-white font-semibold">${sat ? sat.Satellite_Name : 'SAT-' + log.Satellite_ID}</td>
+              <td class="py-2 px-3 text-slate-300">${gs ? gs.Station_Name : 'Station ' + log.Station_ID}</td>
+              <td class="py-2 px-3 text-slate-300">${log.AOS_Time}</td>
+              <td class="py-2 px-3 text-slate-300">${log.LOS_Time}</td>
+              <td class="py-2 px-3 text-cyan-400 font-semibold">${log.Data_Received_MB} MB</td>
+              <td class="py-2 px-3"><span class="text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">${log.Status}</span></td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    function renderMaintenance() {
+      const container = document.getElementById('healthScoreCards');
+      if (container) {
+        container.innerHTML = db.satellites.map(sat => `
+          <div class="glass-card p-3.5 rounded-xl border border-slate-700 space-y-2 font-mono-code text-xs">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-white">${sat.Satellite_Name.split(' ')[0]}</span>
+              <span class="text-${sat.Health > 90 ? 'emerald' : 'amber'}-400 font-bold">${sat.Health}%</span>
+            </div>
+            <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+              <div class="bg-${sat.Health > 90 ? 'emerald' : 'amber'}-400 h-full" style="width: ${sat.Health}%"></div>
+            </div>
+            <div class="text-[10px] text-slate-400">${sat.Status} • Orbit ${sat.Orbit_ID}</div>
+          </div>
+        `).join('');
+      }
+
+      const mTable = document.getElementById('maintenanceTableBody');
+      if (mTable) {
+        mTable.innerHTML = db.maintenance.map(m => {
+          const sat = db.satellites.find(s => s.Satellite_ID === m.Satellite_ID);
+          return `
+            <tr class="hover:bg-slate-800/40">
+              <td class="py-2 px-2 text-cyan-400 font-semibold">${sat ? sat.Satellite_Name.split(' ')[0] : 'SAT'}</td>
+              <td class="py-2 px-2 text-slate-200">${m.Action_Type}</td>
+              <td class="py-2 px-2 text-slate-400">${m.Performed_By}</td>
+              <td class="py-2 px-2 text-emerald-400">$${m.Cost_USD ? m.Cost_USD.toLocaleString() : '0'}</td>
+              <td class="py-2 px-2 text-slate-400">${m.Action_Date}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      const aBoard = document.getElementById('anomaliesBoard');
+      if (aBoard) {
+        aBoard.innerHTML = db.anomalies.map(a => {
+          const sat = db.satellites.find(s => s.Satellite_ID === a.Satellite_ID);
+          return `
+            <div class="bg-space-900/80 p-3 rounded-xl border border-slate-700 text-xs font-mono-code space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-white">${sat ? sat.Satellite_Name : 'SAT'}</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${a.Severity === 'Major' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'}">${a.Severity}</span>
+              </div>
+              <div class="text-slate-300 text-[11px]">${a.Anomaly_Type}</div>
+              <div class="text-[10px] text-slate-400 flex justify-between pt-1 border-t border-slate-800">
+                <span>Status: <strong class="text-white">${a.Resolution_Status}</strong></span>
+                <span>${a.Detected_At}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // ==========================================
+    // 10. MODAL HANDLING & FORM SUBMISSIONS
+    // ==========================================
+    function openModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.classList.remove('hidden');
+        triggerSound('ping');
+      }
+    }
+
+    function closeModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.classList.add('hidden');
+        triggerSound('beep');
+      }
+    }
+
+    function handleNewSatellite(e) {
+      e.preventDefault();
+      const newSat = {
+        Satellite_ID: 100 + db.satellites.length + 1,
+        Satellite_Name: document.getElementById('satNameInput').value,
+        Satellite_Type: document.getElementById('satTypeInput').value,
+        Manufacturer: document.getElementById('satManufacturerInput').value,
+        Launch_Date: new Date().toISOString().substring(0, 10),
+        Mass: parseFloat(document.getElementById('satMassInput').value) || 1000,
+        Status: 'Operational',
+        Orbit_ID: parseInt(document.getElementById('satOrbitInput').value),
+        Image_Url: document.getElementById('satImageInput').value,
+        Health: 100,
+        Mission_Name: 'Newly Deployed Operational Mission'
+      };
+
+      db.satellites.push(newSat);
+      document.getElementById('fleetCountBadge').innerText = db.satellites.length;
+      
+      // Update UI
+      renderFleetCards();
+      renderMaintenance();
+      closeModal('newSatelliteModal');
+      triggerSound('ping');
+      alert(`Spacecraft ${newSat.Satellite_Name} (SAT-${newSat.Satellite_ID}) registered successfully in fleet matrix!`);
+    }
+
+    function handleNewAnomaly(e) {
+      e.preventDefault();
+      const newAnom = {
+        Anomaly_ID: 900 + db.anomalies.length + 1,
+        Satellite_ID: parseInt(document.getElementById('anomalySatSelect').value),
+        Anomaly_Type: document.getElementById('anomalyTypeInput').value,
+        Severity: document.getElementById('anomalySeverityInput').value,
+        Resolution_Status: 'Open',
+        Detected_At: new Date().toISOString().substring(0, 19).replace('T', ' ') + ' UTC',
+        Cause: 'Telemetry telemetry diagnostic alert'
+      };
+
+      db.anomalies.unshift(newAnom);
+      renderDashboardAlerts();
+      renderMaintenance();
+      closeModal('newAnomalyModal');
+      triggerSound('alert');
+      alert('Anomaly logged to diagnostic queue.');
+    }
+
+    // ==========================================
+    // 11. SQL RUNNER SIMULATION
+    // ==========================================
+    function runSampleSQL(idx) {
+      const input = document.getElementById('sqlInput');
+      if (idx === 1) {
+        input.value = "SELECT Satellite_ID, Satellite_Name, Status, Mass FROM SATELLITE WHERE Status = 'Operational';";
+      } else if (idx === 2) {
+        input.value = "SELECT Log_ID, Satellite_ID, Station_ID, AOS_Time, LOS_Time, Data_Received_MB FROM COMMUNICATION_LOG;";
+      }
+      executeSQLQuery();
+    }
+
+    function executeSQLQuery() {
+      triggerSound('ping');
+      const query = document.getElementById('sqlInput').value.trim();
+      const output = document.getElementById('sqlOutputContainer');
+
+      if (query.toUpperCase().includes('SATELLITE')) {
+        output.innerHTML = `
+          <div class="text-emerald-400 mb-1">✔ 5 rows retrieved in 1.4ms (Indexed Scan on PK_Satellite_ID)</div>
+          <table class="w-full text-left border-collapse">
+            <tr class="text-slate-400 border-b border-slate-700"><th>Satellite_ID</th><th>Satellite_Name</th><th>Status</th><th>Mass_kg</th></tr>
+            ${db.satellites.map(s => `<tr><td class="text-cyan-400">${s.Satellite_ID}</td><td>${s.Satellite_Name}</td><td class="text-emerald-400">${s.Status}</td><td>${s.Mass}</td></tr>`).join('')}
+          </table>
+        `;
+      } else {
+        output.innerHTML = `
+          <div class="text-emerald-400 mb-1">✔ Query executed successfully (4 rows returned)</div>
+          <table class="w-full text-left border-collapse">
+            <tr class="text-slate-400 border-b border-slate-700"><th>Log_ID</th><th>Satellite_ID</th><th>Station_ID</th><th>AOS_Time</th><th>Status</th></tr>
+            ${db.commLogs.map(l => `<tr><td class="text-cyan-400">${l.Log_ID}</td><td>${l.Satellite_ID}</td><td>${l.Station_ID}</td><td>${l.AOS_Time}</td><td class="text-emerald-400">${l.Status}</td></tr>`).join('')}
+          </table>
+        `;
+      }
+    }
+
+    // ==========================================
+    // 12. INITIAL PAGE LOAD
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+      initCharts();
+      renderDashboardCommTable();
+      renderDashboardAlerts();
+      renderFleetCards();
+      renderMissions();
+      renderGroundStations();
+      renderMaintenance();
+      executeSQLQuery();
+    });
+  </script>
+</body>
+</html>
